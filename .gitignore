@@ -5,3 +5,4 @@ pom.xml.versionsBackup
 pom.xml.next
 release.properties
 /bin
+/.settings/org.sonar.ide.eclipse.core.prefs
