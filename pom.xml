@@ -7,6 +7,40 @@
 	<name>AludraTest Surefire Provider</name>
 	<description>A Maven Surefire Provider able to find and run AludraTest based tests.</description>
 	
+	<properties>
+		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+	</properties>
+
+	<licenses>
+		<license>
+			<name>Apache License 2.0</name>
+			<url>http://www.apache.org/licenses/LICENSE-2.0</url>
+		</license>
+	</licenses>
+
+	<organization>
+		<name>aludratest.org</name>
+		<url>http://www.aludratest.org/</url>
+	</organization>
+	
+	<url>http://www.aludratest.org/</url>
+	
+	<developers>
+		<developer>
+			<name>Florian Albrecht</name>
+			<id>falbrech-hsdg</id>
+			<organization>Hamburg Sud</organization>
+			<organizationUrl>http://www.hamburgsud.com/</organizationUrl>
+			<timezone>+1</timezone>
+			<roles>
+				<role>architect</role>
+				<role>developer</role>
+				<role>administrator</role>
+			</roles>
+		</developer>
+	</developers>
+	
+	
 	<dependencies>
 		<dependency>
 			<groupId>org.aludratest</groupId>
