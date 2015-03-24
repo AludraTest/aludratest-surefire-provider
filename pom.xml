@@ -8,6 +8,7 @@
 	
 	<properties>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+		<aludratest.version>${project.version}</aludratest.version>
 	</properties>
 
 	<licenses>
@@ -44,7 +45,7 @@
 		<dependency>
 			<groupId>org.aludratest</groupId>
 			<artifactId>aludratest</artifactId>
-			<version>2.7.0</version>
+			<version>${aludratest.version}</version>
 		</dependency>
 	
 		<dependency>
