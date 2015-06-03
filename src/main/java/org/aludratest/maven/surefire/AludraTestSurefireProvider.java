@@ -18,6 +18,7 @@ package org.aludratest.maven.surefire;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Proxy;
 import java.util.Iterator;
+import java.util.Properties;
 
 import org.aludratest.scheduler.RunnerListener;
 import org.apache.commons.collections.IteratorUtils;
@@ -36,109 +37,151 @@ import org.apache.maven.surefire.util.TestsToRun;
 
 public class AludraTestSurefireProvider extends AbstractProvider {
 
-	private ClassLoader testClassLoader;
+    private ClassLoader testClassLoader;
 
-	private ScanResult scanResult;
+    private ScanResult scanResult;
 
-	private RunOrderCalculator runOrderCalculator;
+    private RunOrderCalculator runOrderCalculator;
 
-	private AludraTestTestChecker scannerFilter;
+    private AludraTestTestChecker scannerFilter;
 
-	private final TestRequest testRequest;
+    private final TestRequest testRequest;
 
-	private TestsToRun testsToRun;
+    private TestsToRun testsToRun;
 
-	private ReporterFactory reporterFactory;
+    private ReporterFactory reporterFactory;
 
-	public AludraTestSurefireProvider(ProviderParameters providerParameters) {
-		this.testClassLoader = providerParameters.getTestClassLoader();
-		this.scanResult = providerParameters.getScanResult();
-		this.runOrderCalculator = providerParameters.getRunOrderCalculator();
-		this.scannerFilter = new AludraTestTestChecker(testClassLoader);
-		this.testRequest = providerParameters.getTestRequest();
-		this.reporterFactory = providerParameters.getReporterFactory();
-	}
+    private Properties providerProperties;
 
-	@SuppressWarnings("rawtypes")
-	@Override
-	public Iterator getSuites() {
-		// no special forkmode supported yet.
-		return IteratorUtils.EMPTY_ITERATOR;
-	}
+    public AludraTestSurefireProvider(ProviderParameters providerParameters) {
+        this.testClassLoader = providerParameters.getTestClassLoader();
+        this.scanResult = providerParameters.getScanResult();
+        this.runOrderCalculator = providerParameters.getRunOrderCalculator();
+        this.scannerFilter = new AludraTestTestChecker(testClassLoader);
+        this.testRequest = providerParameters.getTestRequest();
+        this.reporterFactory = providerParameters.getReporterFactory();
+        this.providerProperties = providerParameters.getProviderProperties();
+    }
 
-	@Override
-	public RunResult invoke(Object forkTestSet) throws TestSetFailedException, ReporterException, InvocationTargetException {
-		if (forkTestSet != null) {
-			throw new IllegalArgumentException("AludraTest Surefire Provider does not expect forkTestSet parameter");
-		}
+    @SuppressWarnings("rawtypes")
+    @Override
+    public Iterator getSuites() {
+        // no special forkmode supported yet.
+        return IteratorUtils.EMPTY_ITERATOR;
+    }
 
-		RunListener reporter = reporterFactory.createReporter();
+    private Object prepareAludraTest(AludraTestReportListener reportListener) throws ClassNotFoundException,
+    InvocationTargetException {
+        Object aludraTest = AludraTestReflectionUtil.startFramework(testClassLoader);
 
-		// check direct test request first
-		String directTest = testRequest.getRequestedTest();
-		String directTestMethod = testRequest.getRequestedTestMethod();
-		if (directTest != null) {
-			directTest = directTest.trim();
-			while (directTest.endsWith(",")) {
-				directTest = directTest.substring(0, directTest.length() - 1);
-				directTest = directTest.trim();
-			}
-			Class<?> classToTest = ReflectionUtils.tryLoadClass(testClassLoader, directTest);
-			if (classToTest == null) {
-				throw new IllegalArgumentException("Class " + directTest + " not found in test scope");
-			}
+        // create our very own RunnerListener
+        Class<?> runnerListenerClass = testClassLoader.loadClass(RunnerListener.class.getName());
+        Object runnerListenerProxy = Proxy.newProxyInstance(testClassLoader, new Class<?>[] { runnerListenerClass },
+                reportListener);
 
-			// startup AludraTest Framework
-			Object aludraTest = AludraTestReflectionUtil.startFramework(testClassLoader);
+        // register it to RunnerListenerRegistry
+        AludraTestReflectionUtil.registerRunnerListener(runnerListenerProxy, aludraTest, runnerListenerClass);
 
-			try {
-				// create our very own RunnerListener
-				Class<?> runnerListenerClass = testClassLoader.loadClass(RunnerListener.class.getName());
-				AludraTestReportListener reportListener = new AludraTestReportListener(reporter);
-				Object runnerListenerProxy = Proxy.newProxyInstance(testClassLoader, new Class<?>[] { runnerListenerClass },
-						reportListener);
+        return aludraTest;
+    }
 
-				// register it to RunnerListenerRegistry
-				AludraTestReflectionUtil.registerRunnerListener(runnerListenerProxy, aludraTest, runnerListenerClass);
+    @Override
+    public RunResult invoke(Object forkTestSet) throws TestSetFailedException, ReporterException, InvocationTargetException {
+        if (forkTestSet != null) {
+            throw new IllegalArgumentException("AludraTest Surefire Provider does not expect forkTestSet parameter");
+        }
 
-				AludraTestReflectionUtil.runAludraTest(aludraTest, classToTest);
+        RunListener reporter = reporterFactory.createReporter();
+        AludraTestReportListener reportListener = new AludraTestReportListener(reporter);
 
-				// extract results from listener
-				return reportListener.createRunResult();
-			}
-			catch (ClassNotFoundException e) {
-				throw new InvocationTargetException(e);
-			}
-			finally {
-				AludraTestReflectionUtil.stopFramework(aludraTest);
-			}
-		}
-		else if (directTestMethod != null) {
-			// TODO support for method only invocation
-			throw new TestSetFailedException("Running AludraTest test methods currently not supported (" + directTestMethod
-					+ " cannot be executed)");
-		}
-		else {
-			if (testsToRun == null) {
-				// if (forkTestSet instanceof TestsToRun) {
-				// testsToRun = (TestsToRun) forkTestSet;
-				// }
-				// else if (forkTestSet instanceof Class) {
-				// testsToRun = TestsToRun.fromClass((Class<?>) forkTestSet);
-				// }
-				// else {
-					testsToRun = scanClassPath();
-				// }
-			}
+        // check if there is a filter / category configuration
+        if (providerProperties != null && providerProperties.getProperty("aludratest.filter") != null
+                && !"".equals(providerProperties.getProperty("aludratest.filter").trim())) {
+            String filter = providerProperties.getProperty("aludratest.filter").trim();
+            String categoryTree = providerProperties.getProperty("aludratest.categories");
+            if (categoryTree != null) {
+                categoryTree = categoryTree.trim();
+            }
+            if ("".equals(categoryTree)) {
+                categoryTree = null;
+            }
 
-			throw new TestSetFailedException(
-					"Running multiple AludraTest test classes currently not supported. Please use -Dtest=<testOrSuiteClass>");
-		}
-	}
+            Object aludraTest = null;
+            try {
+                aludraTest = prepareAludraTest(reportListener);
+                AludraTestReflectionUtil.runAludraTest(aludraTest, testRequest.getTestSourceDirectory(), filter, categoryTree,
+                        testClassLoader);
 
-	private TestsToRun scanClassPath() {
-		final TestsToRun scanned = scanResult.applyFilter(scannerFilter, testClassLoader);
-		return runOrderCalculator.orderTestClasses(scanned);
-	}
+                // extract results from listener
+                return reportListener.createRunResult();
+            }
+            catch (ClassNotFoundException e) {
+                throw new InvocationTargetException(e);
+            }
+            finally {
+                if (aludraTest != null) {
+                    AludraTestReflectionUtil.stopFramework(aludraTest);
+                }
+            }
+        }
+
+        // check direct test request first
+        String directTest = testRequest.getRequestedTest();
+        String directTestMethod = testRequest.getRequestedTestMethod();
+        if (directTest != null) {
+            directTest = directTest.trim();
+            while (directTest.endsWith(",")) {
+                directTest = directTest.substring(0, directTest.length() - 1);
+                directTest = directTest.trim();
+            }
+            Class<?> classToTest = ReflectionUtils.tryLoadClass(testClassLoader, directTest);
+            if (classToTest == null) {
+                throw new IllegalArgumentException("Class " + directTest + " not found in test scope");
+            }
+
+            Object aludraTest = null;
+            try {
+                aludraTest = prepareAludraTest(reportListener);
+                AludraTestReflectionUtil.runAludraTest(aludraTest, classToTest);
+
+                // extract results from listener
+                return reportListener.createRunResult();
+            }
+            catch (ClassNotFoundException e) {
+                throw new InvocationTargetException(e);
+            }
+            finally {
+                if (aludraTest != null) {
+                    AludraTestReflectionUtil.stopFramework(aludraTest);
+                }
+            }
+        }
+        else if (directTestMethod != null) {
+            // TODO support for method only invocation
+            throw new TestSetFailedException("Running AludraTest test methods currently not supported (" + directTestMethod
+                    + " cannot be executed)");
+        }
+        else {
+            if (testsToRun == null) {
+                // if (forkTestSet instanceof TestsToRun) {
+                // testsToRun = (TestsToRun) forkTestSet;
+                // }
+                // else if (forkTestSet instanceof Class) {
+                // testsToRun = TestsToRun.fromClass((Class<?>) forkTestSet);
+                // }
+                // else {
+                testsToRun = scanClassPath();
+                // }
+            }
+
+            throw new TestSetFailedException(
+                    "Running multiple AludraTest test classes currently not supported. Please use -Dtest=<testOrSuiteClass>");
+        }
+    }
+
+    private TestsToRun scanClassPath() {
+        final TestsToRun scanned = scanResult.applyFilter(scannerFilter, testClassLoader);
+        return runOrderCalculator.orderTestClasses(scanned);
+    }
 
 }
