@@ -45,7 +45,7 @@
 		<dependency>
 			<groupId>org.aludratest</groupId>
 			<artifactId>aludratest</artifactId>
-			<version>3.0.0</version>
+			<version>${aludratest.version}</version>
 		</dependency>
 	
 		<dependency>
