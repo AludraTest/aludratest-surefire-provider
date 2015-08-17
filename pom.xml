@@ -8,7 +8,7 @@
 	
 	<properties>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-		<aludratest.version>${project.version}</aludratest.version>
+		<aludratest.version>3.0.2</aludratest.version>
 	</properties>
 
 	<licenses>
